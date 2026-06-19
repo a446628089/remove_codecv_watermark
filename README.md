@@ -60,5 +60,3 @@ python3 remove_codecv_watermark.py --help
 
 - 本脚本主要针对 CodeCV 当前导出的 `/Pattern` 平铺水印 PDF。
 - 如果 CodeCV 后续改变导出实现，脚本可能需要调整。
-- 仓库默认通过 `.gitignore` 忽略所有 `*.pdf`，避免误上传真实简历或个人信息。
-- 上传 GitHub 前建议运行 `git status`，确认没有把个人 PDF 加入版本控制。
