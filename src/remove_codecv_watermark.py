@@ -161,18 +161,38 @@ def _context_menu_mode(file_path: str) -> int:
         _show_message("文件错误", f"不支持的文件类型：{input_pdf.suffix}\n请选择 PDF 文件。", is_error=True)
         return 1
 
-    output_pdf = default_output_path(input_pdf)
     try:
-        removed = remove_watermark(input_pdf, output_pdf)
+        # 1. Create "源文件" folder next to the PDF
+        src_dir = input_pdf.parent
+        backup_dir = src_dir / "源文件"
+        backup_dir.mkdir(exist_ok=True)
+
+        # 2. Move original PDF into "源文件/" (avoid name collision)
+        backup_path = backup_dir / input_pdf.name
+        counter = 1
+        while backup_path.exists():
+            stem = f"{input_pdf.stem}_{counter}"
+            backup_path = backup_dir / f"{stem}{input_pdf.suffix}"
+            counter += 1
+        input_pdf.rename(backup_path)
+
+        # 3. Output cleaned PDF with the **original** file name
+        output_path = src_dir / input_pdf.name
+
+        removed = remove_watermark(backup_path, output_path)
         if removed > 0:
             _show_message(
                 "去除水印完成",
-                f"已去除 {removed} 个 CodeCV 水印。\n\n输出文件：\n{output_pdf}",
+                f"已去除 {removed} 个 CodeCV 水印。\n\n"
+                f"原文件移至：{backup_dir.name}/\n"
+                f"干净文件：{output_path.name}",
             )
         else:
             _show_message(
                 "未检测到水印",
-                f"未发现 CodeCV 水印。\n\n输出文件已生成：\n{output_pdf}",
+                f"未发现 CodeCV 水印。\n\n"
+                f"原文件移至：{backup_dir.name}/\n"
+                f"干净文件：{output_path.name}",
             )
         return 0
     except Exception as exc:
