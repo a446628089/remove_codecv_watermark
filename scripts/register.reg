@@ -1,0 +1,7 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\*\shell\RemoveCodecvWatermark]
+@="Remove CodeCV Watermark"
+
+[HKEY_CURRENT_USER\Software\Classes\*\shell\RemoveCodecvWatermark\command]
+@="\"D:\\develop\\codecv\\remove_codecv_watermark\\dist\\RemoveCodecvWatermark.exe\" \"%1\""

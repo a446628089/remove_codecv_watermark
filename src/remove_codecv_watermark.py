@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Remove CodeCV's tiled PDF watermark from exported resumes."""
+"""Remove CodeCV's tiled PDF watermark from exported resumes.
+
+Supports two modes:
+  - CLI mode:   python script.py <input.pdf> [output.pdf]
+  - GUI mode:   python script.exe <input.pdf>   (shows message boxes, for context menu)
+"""
 
 from __future__ import annotations
 
 import argparse
+import ctypes
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -124,7 +131,53 @@ def remove_watermark(input_pdf: str | Path, output_pdf: str | Path) -> int:
 
 
 def default_output_path(input_pdf: Path) -> Path:
+    """Append DEFAULT_OUTPUT_SUFFIX to the stem."""
     return input_pdf.with_name(input_pdf.stem + DEFAULT_OUTPUT_SUFFIX)
+
+
+# ── GUI helpers (message boxes for context‑menu mode) ──────────────────────
+
+def _show_message(title: str, message: str, is_error: bool = False) -> None:
+    """Display a Windows message box (no console dependency)."""
+    ctypes.windll.user32.MessageBoxW(
+        0,
+        message,
+        title,
+        0x10 if is_error else 0x40,  # MB_ICONERROR | MB_ICONINFORMATION
+    )
+
+
+# ── Entry points ───────────────────────────────────────────────────────────
+
+def _context_menu_mode(file_path: str) -> int:
+    """Invoked when a single file path is dropped on the exe."""
+    input_pdf = Path(file_path)
+
+    if not input_pdf.exists():
+        _show_message("文件错误", f"找不到文件：\n{input_pdf}", is_error=True)
+        return 1
+
+    if input_pdf.suffix.lower() != ".pdf":
+        _show_message("文件错误", f"不支持的文件类型：{input_pdf.suffix}\n请选择 PDF 文件。", is_error=True)
+        return 1
+
+    output_pdf = default_output_path(input_pdf)
+    try:
+        removed = remove_watermark(input_pdf, output_pdf)
+        if removed > 0:
+            _show_message(
+                "去除水印完成",
+                f"已去除 {removed} 个 CodeCV 水印。\n\n输出文件：\n{output_pdf}",
+            )
+        else:
+            _show_message(
+                "未检测到水印",
+                f"未发现 CodeCV 水印。\n\n输出文件已生成：\n{output_pdf}",
+            )
+        return 0
+    except Exception as exc:
+        _show_message("处理失败", f"去除水印时出错：\n{exc}", is_error=True)
+        return 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,6 +195,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    # If called with a single non-flag argument, run in GUI (context menu) mode.
+    if len(sys.argv) == 2 and not sys.argv[1].startswith("-"):
+        return _context_menu_mode(sys.argv[1])
+
+    # Otherwise, classic CLI mode.
     args = parse_args()
     output_pdf = args.output_pdf or default_output_path(args.input_pdf)
     removed = remove_watermark(args.input_pdf, output_pdf)
