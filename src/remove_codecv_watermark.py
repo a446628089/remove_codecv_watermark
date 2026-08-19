@@ -2,8 +2,8 @@
 """Remove CodeCV's tiled PDF watermark from exported resumes.
 
 Supports three modes:
-  - CLI mode:      python script.py <input.pdf> [output.pdf]
-  - Batch mode:    python script.py <directory> [--recursive] [--output-dir DIR]
+  - CLI mode:      python script.py <input.pdf> [output.pdf] [--backup]
+  - Batch mode:    python script.py <directory> [--recursive] [--output-dir DIR] [--backup]
   - GUI mode:      python script.exe <input.pdf>   (shows message boxes, for context menu)
 """
 
@@ -20,6 +20,7 @@ from pypdf.generic import ContentStream, DecodedStreamObject, NameObject
 
 
 DEFAULT_OUTPUT_SUFFIX = ".clean.pdf"
+BACKUP_DIR_NAME = "源文件"
 
 
 def _is_name(value, expected: str) -> bool:
@@ -136,6 +137,26 @@ def default_output_path(input_pdf: Path) -> Path:
     return input_pdf.with_name(input_pdf.stem + DEFAULT_OUTPUT_SUFFIX)
 
 
+def backup_original(input_pdf: Path) -> Path:
+    """Move *input_pdf* into a ``BACKUP_DIR_NAME`` folder next to it.
+
+    Uses an indexed filename (e.g. ``resume_1.pdf``) if the backup already
+    exists, so repeated runs never overwrite an earlier backup.  Returns the
+    backup path; the original location is freed for the cleaned output.
+    """
+    backup_dir = input_pdf.parent / BACKUP_DIR_NAME
+    backup_dir.mkdir(exist_ok=True)
+
+    backup_path = backup_dir / input_pdf.name
+    counter = 1
+    while backup_path.exists():
+        stem = f"{input_pdf.stem}_{counter}"
+        backup_path = backup_dir / f"{stem}{input_pdf.suffix}"
+        counter += 1
+    input_pdf.rename(backup_path)
+    return backup_path
+
+
 # ── Batch helpers (directory processing) ───────────────────────────────────
 
 def _iter_pdf_files(directory: Path, recursive: bool) -> Iterable[Path]:
@@ -144,7 +165,12 @@ def _iter_pdf_files(directory: Path, recursive: bool) -> Iterable[Path]:
     return sorted(directory.glob(pattern))
 
 
-def _batch_main(directory: Path, output_dir: Path | None, recursive: bool) -> int:
+def _batch_main(
+    directory: Path,
+    output_dir: Path | None,
+    recursive: bool,
+    backup: bool,
+) -> int:
     pdfs = list(_iter_pdf_files(directory, recursive))
     if not pdfs:
         print(f"No PDF files found under: {directory}")
@@ -153,12 +179,13 @@ def _batch_main(directory: Path, output_dir: Path | None, recursive: bool) -> in
     processed = 0
     for pdf in pdfs:
         try:
+            source = backup_original(pdf) if backup else pdf
             if output_dir is not None:
                 output_dir.mkdir(parents=True, exist_ok=True)
                 out = output_dir / (pdf.stem + DEFAULT_OUTPUT_SUFFIX)
             else:
-                out = default_output_path(pdf)
-            removed = remove_watermark(pdf, out)
+                out = pdf if backup else default_output_path(pdf)
+            removed = remove_watermark(source, out)
             processed += 1
             print(f"[OK]   {pdf.name} -> {out.name}  (removed {removed})")
         except Exception as exc:
@@ -195,21 +222,11 @@ def _context_menu_mode(file_path: str) -> int:
         return 1
 
     try:
-        # 1. Create "源文件" folder next to the PDF
+        # 1. Back up the original file into "源文件/" (frees the original name)
         src_dir = input_pdf.parent
-        backup_dir = src_dir / "源文件"
-        backup_dir.mkdir(exist_ok=True)
+        backup_path = backup_original(input_pdf)
 
-        # 2. Move original PDF into "源文件/" (avoid name collision)
-        backup_path = backup_dir / input_pdf.name
-        counter = 1
-        while backup_path.exists():
-            stem = f"{input_pdf.stem}_{counter}"
-            backup_path = backup_dir / f"{stem}{input_pdf.suffix}"
-            counter += 1
-        input_pdf.rename(backup_path)
-
-        # 3. Output cleaned PDF with the **original** file name
+        # 2. Output cleaned PDF with the **original** file name
         output_path = src_dir / input_pdf.name
 
         removed = remove_watermark(backup_path, output_path)
@@ -217,14 +234,14 @@ def _context_menu_mode(file_path: str) -> int:
             _show_message(
                 "去除水印完成",
                 f"已去除 {removed} 个 CodeCV 水印。\n\n"
-                f"原文件移至：{backup_dir.name}/\n"
+                f"原文件移至：{BACKUP_DIR_NAME}/\n"
                 f"干净文件：{output_path.name}",
             )
         else:
             _show_message(
                 "未检测到水印",
                 f"未发现 CodeCV 水印。\n\n"
-                f"原文件移至：{backup_dir.name}/\n"
+                f"原文件移至：{BACKUP_DIR_NAME}/\n"
                 f"干净文件：{output_path.name}",
             )
         return 0
@@ -258,6 +275,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Write cleaned PDFs into this directory (keeps the original filename stem).",
     )
+    parser.add_argument(
+        "--backup",
+        action="store_true",
+        help="Back the original PDF(s) up into a '%s' folder before processing." % BACKUP_DIR_NAME,
+    )
     return parser.parse_args()
 
 
@@ -276,15 +298,19 @@ def main() -> int:
 
     # Batch mode: the input is a directory.
     if input_path.is_dir():
-        return _batch_main(input_path, args.output_dir, args.recursive)
+        return _batch_main(input_path, args.output_dir, args.recursive, args.backup)
 
     # Classic CLI mode (single file).
-    if args.output_dir is not None:
+    source = backup_original(input_path) if args.backup else input_path
+    if args.backup and args.output_dir is None and args.output_pdf is None:
+        # Back up the original and write the cleaned file under the original name.
+        output_pdf = input_path
+    elif args.output_dir is not None:
         args.output_dir.mkdir(parents=True, exist_ok=True)
         output_pdf = args.output_dir / (input_path.stem + DEFAULT_OUTPUT_SUFFIX)
     else:
         output_pdf = args.output_pdf or default_output_path(input_path)
-    removed = remove_watermark(input_path, output_pdf)
+    removed = remove_watermark(source, output_pdf)
     print(f"Removed {removed} CodeCV watermark pattern fill(s).")
     print(f"Wrote: {output_pdf}")
     return 0 if removed else 1

@@ -11,6 +11,7 @@
 - **右键菜单模式**：右键 PDF 文件 → "Remove CodeCV Watermark" → 弹窗提示结果
 - 命令行模式：支持指定输入/输出路径
 - **批量模式**：传入目录，一次性处理其中所有 PDF（支持递归子目录）
+- **备份保护**：`--backup` 处理前自动把原文件移到 `源文件/` 目录
 
 ## 快速开始
 
@@ -30,7 +31,7 @@ scripts\build.bat
 
 在任意 CodeCV 导出的 PDF 上右键 → **Remove CodeCV Watermark**
 
-同目录下会生成 `原文件名.clean.pdf`。
+同目录下会生成 `原文件名.clean.pdf`，原文件自动移入 `源文件/`。
 
 > 卸载右键菜单：右键 `scripts\unregister_context_menu.ps1` → Run with PowerShell
 
@@ -55,6 +56,16 @@ python src/remove_codecv_watermark.py "简历文件夹" --output-dir "已去水�
 
 # 单文件输出到指定目录
 python src/remove_codecv_watermark.py "带水印简历.pdf" --output-dir "已去水印"
+```
+
+### 备份原文件
+
+```bash
+# 原文件移入 源文件/，干净文件覆盖原路径（同右键菜单行为）
+python src/remove_codecv_watermark.py "带水印简历.pdf" --backup
+
+# 批量处理 + 备份
+python src/remove_codecv_watermark.py "简历文件夹" --backup
 ```
 
 ## 项目结构
