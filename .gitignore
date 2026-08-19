@@ -11,6 +11,16 @@ env/
 tmp/
 output/
 
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
 # Resume PDFs usually contain private information. Remove this rule only if you
 # intentionally want to publish a sanitized sample PDF.
 *.pdf
