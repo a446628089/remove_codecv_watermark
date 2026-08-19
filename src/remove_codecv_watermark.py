@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Remove CodeCV's tiled PDF watermark from exported resumes.
 
-Supports two modes:
-  - CLI mode:   python script.py <input.pdf> [output.pdf]
-  - GUI mode:   python script.exe <input.pdf>   (shows message boxes, for context menu)
+Supports three modes:
+  - CLI mode:      python script.py <input.pdf> [output.pdf]
+  - Batch mode:    python script.py <directory> [--recursive] [--output-dir DIR]
+  - GUI mode:      python script.exe <input.pdf>   (shows message boxes, for context menu)
 """
 
 from __future__ import annotations
@@ -135,7 +136,39 @@ def default_output_path(input_pdf: Path) -> Path:
     return input_pdf.with_name(input_pdf.stem + DEFAULT_OUTPUT_SUFFIX)
 
 
-# ── GUI helpers (message boxes for context‑menu mode) ──────────────────────
+# ── Batch helpers (directory processing) ───────────────────────────────────
+
+def _iter_pdf_files(directory: Path, recursive: bool) -> Iterable[Path]:
+    """Yield PDF files under *directory*, optionally scanning subfolders."""
+    pattern = "**/*.pdf" if recursive else "*.pdf"
+    return sorted(directory.glob(pattern))
+
+
+def _batch_main(directory: Path, output_dir: Path | None, recursive: bool) -> int:
+    pdfs = list(_iter_pdf_files(directory, recursive))
+    if not pdfs:
+        print(f"No PDF files found under: {directory}")
+        return 1
+
+    processed = 0
+    for pdf in pdfs:
+        try:
+            if output_dir is not None:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                out = output_dir / (pdf.stem + DEFAULT_OUTPUT_SUFFIX)
+            else:
+                out = default_output_path(pdf)
+            removed = remove_watermark(pdf, out)
+            processed += 1
+            print(f"[OK]   {pdf.name} -> {out.name}  (removed {removed})")
+        except Exception as exc:
+            print(f"[FAIL] {pdf.name}: {exc}")
+
+    print(f"\nProcessed {processed}/{len(pdfs)} PDF(s).")
+    return 0 if processed else 1
+
+
+# ── GUI helpers (message boxes for context-menu mode) ──────────────────────
 
 def _show_message(title: str, message: str, is_error: bool = False) -> None:
     """Display a Windows message box (no console dependency)."""
@@ -204,25 +237,54 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Remove CodeCV's tiled watermark from an exported resume PDF."
     )
-    parser.add_argument("input_pdf", type=Path, help="Path to the exported CodeCV PDF")
+    parser.add_argument(
+        "input_pdf",
+        type=Path,
+        help="Path to the exported CodeCV PDF, or a directory to batch process",
+    )
     parser.add_argument(
         "output_pdf",
         type=Path,
         nargs="?",
         help="Cleaned PDF path. Defaults to '<input>.clean.pdf'.",
     )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="When the input is a directory, also process PDFs in subfolders.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Write cleaned PDFs into this directory (keeps the original filename stem).",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     # If called with a single non-flag argument, run in GUI (context menu) mode.
-    if len(sys.argv) == 2 and not sys.argv[1].startswith("-"):
+    # Skip directories so batch mode is not hijacked by this branch.
+    if (
+        len(sys.argv) == 2
+        and not sys.argv[1].startswith("-")
+        and not Path(sys.argv[1]).is_dir()
+    ):
         return _context_menu_mode(sys.argv[1])
 
-    # Otherwise, classic CLI mode.
     args = parse_args()
-    output_pdf = args.output_pdf or default_output_path(args.input_pdf)
-    removed = remove_watermark(args.input_pdf, output_pdf)
+    input_path = args.input_pdf
+
+    # Batch mode: the input is a directory.
+    if input_path.is_dir():
+        return _batch_main(input_path, args.output_dir, args.recursive)
+
+    # Classic CLI mode (single file).
+    if args.output_dir is not None:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        output_pdf = args.output_dir / (input_path.stem + DEFAULT_OUTPUT_SUFFIX)
+    else:
+        output_pdf = args.output_pdf or default_output_path(input_path)
+    removed = remove_watermark(input_path, output_pdf)
     print(f"Removed {removed} CodeCV watermark pattern fill(s).")
     print(f"Wrote: {output_pdf}")
     return 0 if removed else 1
