@@ -10,6 +10,7 @@
 - 保留原 PDF 页数、页面尺寸和可抽取文本
 - **右键菜单模式**：右键 PDF 文件 → "Remove CodeCV Watermark" → 弹窗提示结果
 - 命令行模式：支持指定输入/输出路径
+- **批量模式**：传入目录，一次性处理其中所有 PDF（支持递归子目录）
 
 ## 快速开始
 
@@ -38,6 +39,22 @@ scripts\build.bat
 ```bash
 python src/remove_codecv_watermark.py "带水印简历.pdf"
 python src/remove_codecv_watermark.py "带水印简历.pdf" "去水印简历.pdf"
+```
+
+### 批量处理
+
+```bash
+# 处理目录下所有 PDF（原地生成 *.clean.pdf）
+python src/remove_codecv_watermark.py "简历文件夹"
+
+# 递归扫描子目录
+python src/remove_codecv_watermark.py "简历文件夹" --recursive
+
+# 批量输出到指定目录
+python src/remove_codecv_watermark.py "简历文件夹" --output-dir "已去水印"
+
+# 单文件输出到指定目录
+python src/remove_codecv_watermark.py "带水印简历.pdf" --output-dir "已去水印"
 ```
 
 ## 项目结构
